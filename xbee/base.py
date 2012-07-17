@@ -11,17 +11,23 @@ This class defines data and methods common to all XBee modules.
 This class should be subclassed in order to provide
 series-specific functionality.
 """
-import struct, threading, time
+import threading, os, logging, time
+import serial
 from xbee.frame import APIFrame
 from xbee.python2to3 import byteToInt, intToByte
 
+log = logging.getLogger(__name__)
+
 class ThreadQuitException(Exception):
+    pass
+
+class TimeoutException(Exception):
     pass
     
 class CommandFrameException(KeyError):
     pass
 
-class XBeeBase(threading.Thread):
+class XBeeBase(object):
     """
     Abstract base class providing command generation and response
     parsing methods for XBee modules.
@@ -48,18 +54,37 @@ class XBeeBase(threading.Thread):
                  XBee device's documentation for more information.
     """
                        
-    def __init__(self, ser, shorthand=True, callback=None, escaped=False):
+    def __init__(self, ser=None, shorthand=True, callback=None, escaped=False, start_callback=None):
         super(XBeeBase, self).__init__()
-        self.serial = ser
+
+        if isinstance(ser, serial.Serial):
+            self.serial = ser
+            self.serial_opts = None
+        else:
+            self.serial = None
+            self.serial_opts = ser
+
         self.shorthand = shorthand
-        self._callback = None
-        self._thread_continue = False
-        self._escaped = escaped  
+        self._callback = callback
+        self._start_callback = start_callback
+        self._exit = threading.Event()
+        self._escaped = escaped
+        self._thread = None
         
-        if callback:
-            self._callback = callback
-            self._thread_continue = True
-            self.start()
+#        if callback:
+#            self.start()
+
+
+    def start(self):
+        if not self._callback: return
+        self._exit.clear()
+        port = self.serial.port if self.serial else self.serial_opts['port']
+        self._thread = threading.Thread(
+                target=self.run,
+                name="XBee @ %s" % port )
+        self._thread.daemon = True
+        self._thread.start()
+
 
     def halt(self):
         """
@@ -69,9 +94,9 @@ class XBeeBase(threading.Thread):
         halted. This method will wait until the thread has cleaned
         up before returning.
         """
-        if self._callback:
-            self._thread_continue = False
-            self.join()
+        if not self._callback: return
+        self._exit.set()
+        self._thread.join(10)
         
     def _write(self, data):
         """
@@ -90,13 +115,54 @@ class XBeeBase(threading.Thread):
         This method overrides threading.Thread.run() and is automatically
         called when an instance is created with threading enabled.
         """
-        while True:
+
+        if self.serial is not None and self._start_callback:
+            self._start_callback(self)
+
+        while not self._exit.is_set():
             try:
-                self._callback(self.wait_read_frame())
-            except ThreadQuitException:
-                break
+                if self.serial is None:
+                    # allows the code to recover/ initialize if the USB device 
+                    # is unplugged after this code is running:
+                    if not os.path.exists( self.serial_opts['port'] ):
+                        self._exit.wait(10) # wait before retry
+                        continue
+                    # self.serial may be a dict of init params
+                    self.serial = serial.Serial(**self.serial_opts)
+                    log.debug("Opened serial: %r", self.serial_opts)
+                    if self._start_callback: self._start_callback(self)
+
+                # FIXME this timeout should not be hard-coded, it should be 
+                # based on the serial timeout
+                self._callback(self.wait_read_frame(timeout=10))
+
+            # ignore timeouts, but this allows the thread to be responsive rather
+            # than blocking indefinitely on read
+            except TimeoutException, ex:
+                if ex.args: log.debug("Packet timeout after %s bytes", ex)
+
+            except serial.SerialException as ex:
+                self._exit.wait(2)
+                log.warn("Serial error: %s", ex)
+                try: # try to re-init the device
+                    if self.serial is not None:
+                        self.serial.open() 
+                        log.debug("Re-opened serial port @ %s", self.serial.port)
+                except Exception, msg: 
+                    # worst case, completely re-init the device
+                    log.exception( "Error re-opening serial port! %s", msg )
+                    # TODO use Serial.getSettingsDict() to re-init the port
+                    if self.serial_opts is None: raise # can't re-init! Abort! Abort!
+                    self.serial = None
+
+            except ThreadQuitException: break
+
+            except Exception, msg:
+                log.exception( "Unexpected error! %s", msg )
+
+        self.serial.close()
     
-    def _wait_for_frame(self):
+    def _wait_for_frame(self,timeout=None):
         """
         _wait_for_frame: None -> binary data
         
@@ -109,37 +175,43 @@ class XBeeBase(threading.Thread):
         exit by raising a ThreadQuitException.
         """
         frame = APIFrame(escaped=self._escaped)
+
+        deadline = 0
+        if timeout is not None and timeout > 0:
+            deadline = time.time() + timeout
         
         while True:
-                if self._callback and not self._thread_continue:
-                    raise ThreadQuitException
+            if self._exit.is_set(): raise ThreadQuitException
 
-                if self.serial.inWaiting() == 0:
-                    time.sleep(.01)
-                    continue
+            byte = self.serial.read()
+
+            if byte != APIFrame.START_BYTE:
+                if deadline and time.time() > deadline:
+                    raise TimeoutException
+                continue
+
+            if timeout is not None and timeout > 0:
+                deadline = time.time() + timeout
+
+            frame.fill(byte)    # Save all following bytes
                 
-                byte = self.serial.read()
+            while(frame.remaining_bytes() > 0):
+                if self._exit.is_set(): raise ThreadQuitException
 
-                if byte != APIFrame.START_BYTE:
-                    continue
+                if self.serial.inWaiting() < 1 and \
+                        deadline and time.time() > deadline:
+                    raise TimeoutException, len(frame.data)
 
-                # Save all following bytes, if they are not empty
-                if len(byte) == 1:
-                    frame.fill(byte)
-                    
-                while(frame.remaining_bytes() > 0):
-                    byte = self.serial.read()
-                    
-                    if len(byte) == 1:
-                        frame.fill(byte)
+                byte = self.serial.read( frame.remaining_bytes() )                
+                for b in byte: frame.fill(b)
 
-                try:
-                    # Try to parse and return result
-                    frame.parse()
-                    return frame
-                except ValueError:
-                    # Bad frame, so restart
-                    frame = APIFrame(escaped=self._escaped)
+            try:
+                # Try to parse and return result
+                frame.parse()
+                return frame
+            except ValueError:
+                # Bad frame, so restart
+                frame = APIFrame(escaped=self._escaped)
                         
     def _build_command(self, cmd, **kwargs):
         """
@@ -176,7 +248,7 @@ class XBeeBase(threading.Thread):
                     else:
                         # Otherwise, fail
                         raise KeyError(
-                            "The expected field %s of length %d was not provided" 
+                            "The expected field '%s' of length %d was not provided" 
                             % (field['name'], field['len']))
                 else:
                     # No specific length, ignore it
@@ -269,9 +341,9 @@ class XBeeBase(threading.Thread):
         # If there are more bytes than expected, raise an exception
         if index < len(data):
             raise ValueError(
-                "Response packet was longer than expected; expected: %d, got: %d bytes" % (index, 
-                                                                                           len(data)))
-                                                                                           
+                "Response packet [ %r ] too long! Expected: %d, got: %d bytes" % \
+                (data, index, len(data)) )
+
         # Apply parsing rules if any exist
         if 'parsing' in packet:
             for parse_rule in packet['parsing']:
@@ -381,7 +453,7 @@ class XBeeBase(threading.Thread):
         self._write(self._build_command(cmd, **kwargs))
         
         
-    def wait_read_frame(self):
+    def wait_read_frame(self,timeout=None):
         """
         wait_read_frame: None -> frame info dictionary
         
@@ -391,9 +463,10 @@ class XBeeBase(threading.Thread):
         and returns the resulting dictionary
         """
         
-        frame = self._wait_for_frame()
+        frame = self._wait_for_frame(timeout)
         return self._split_response(frame.data)
         
+
     def __getattr__(self, name):
         """
         If a method by the name of a valid api command is called,
