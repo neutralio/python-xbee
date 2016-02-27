@@ -20,7 +20,7 @@ BAUD_RATE = 9600
 ser = serial.Serial(PORT, BAUD_RATE)
 
 # Create API object
-xbee = XBee(ser)
+xbee = ZigBee(ser, escaped=True)
 
 # Continuously read and print packets
 while True:
