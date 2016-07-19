@@ -94,14 +94,6 @@ class ZigBee(XBeeBase):
                              {'name':'source_addr',     'len':2},
                              {'name':'options',         'len':1},
                              {'name':'rf_data',         'len':None}]},
-                     b"\xa1": # See http://ftp1.digi.com/support/documentation/90002002.pdf
-                        {'name':'route_record_indicator',
-                         'structure':
-                            [{'name':'source_addr_long','len':8},
-                             {'name':'source_addr',     'len':2},
-                             {'name':'receive_options', 'len':1},
-                             {'name':'hop_count',       'len':1},
-                             {'name':'addresses',       'len':None}]},
                      b"\x91":
                         {'name':'rx_explicit',
                          'structure':
@@ -159,6 +151,14 @@ class ZigBee(XBeeBase):
                           'parsing': [('parameter',
                                        lambda self, original: self._parse_IS_at_response(original))]
                              },
+                     b"\xa1": # See http://ftp1.digi.com/support/documentation/90002002.pdf
+                        {'name':'route_record_indicator',
+                         'structure':
+                            [{'name':'source_addr_long','len':8},
+                             {'name':'source_addr',     'len':2},
+                             {'name':'receive_options', 'len':1},
+                             {'name':'hop_count',       'len':1},
+                             {'name':'addresses',       'len':None}]},
                      b"\x95":
                         {'name':'node_id_indicator',
                          'structure':
