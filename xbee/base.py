@@ -265,9 +265,9 @@ class XBeeBase(threading.Thread):
                 # Store the number of bytes specified
 
                 # Are we trying to read beyond the last data element?
-                if index + field['len'] > len(data):
-                    raise ValueError(
-                        "Response packet was shorter than expected")
+                expected_len = index + field['len']
+                if expected_len > len(data):
+                    raise ValueError("Response packet was shorter than expected; expected: %d, got: %d bytes" % (expected_len, len(data)))
 
                 field_data = data[index:index + field['len']]
                 info[field['name']] = field_data
@@ -287,9 +287,7 @@ class XBeeBase(threading.Thread):
 
         # If there are more bytes than expected, raise an exception
         if index < len(data):
-            raise ValueError(
-                "Response packet was longer than expected; expected: %d, got: %d bytes" % (index,
-                                                                                           len(data)))
+            raise ValueError("Response packet was longer than expected; expected: %d, got: %d bytes" % (index, len(data)))
 
         # Apply parsing rules if any exist
         if 'parsing' in packet:
@@ -299,7 +297,6 @@ class XBeeBase(threading.Thread):
                     # Apply the parse function to the indicated field and
                     # replace the raw data with the result
                     info[parse_rule[0]] = parse_rule[1](self, info)
-
         return info
 
     def _parse_samples_header(self, io_bytes):

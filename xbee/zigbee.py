@@ -139,7 +139,7 @@ class ZigBee(XBeeBase):
                                      ('parameter',
                                        lambda self, original: self._parse_ND_at_response(original))]
                              },
-                     b"\x97": #Checked GDR (not sure about parameter, could be 4 bytes)
+                     b"\x97": # Checked GDR (not sure about parameter, could be 4 bytes)
                         {'name':'remote_at_response',
                          'structure':
                             [{'name':'frame_id',        'len':1},
@@ -151,6 +151,14 @@ class ZigBee(XBeeBase):
                           'parsing': [('parameter',
                                        lambda self, original: self._parse_IS_at_response(original))]
                              },
+                     b"\xa1": # See http://ftp1.digi.com/support/documentation/90002002.pdf
+                        {'name':'route_record_indicator',
+                         'structure':
+                            [{'name':'source_addr_long','len':8},
+                             {'name':'source_addr',     'len':2},
+                             {'name':'receive_options', 'len':1},
+                             {'name':'hop_count',       'len':1},
+                             {'name':'addresses',       'len':None}]},
                      b"\x95":
                         {'name':'node_id_indicator',
                          'structure':
@@ -166,7 +174,7 @@ class ZigBee(XBeeBase):
                              {'name':'digi_profile_id', 'len':2},
                              {'name':'manufacturer_id', 'len':2}]}
                      }
-    
+
     def _parse_IS_at_response(self, packet_info):
         """
         If the given packet is a successful remote AT response for an IS
