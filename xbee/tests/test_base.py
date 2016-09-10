@@ -9,7 +9,7 @@ Tests the XBeeBase superclass module for XBee API conformance.
 """
 import unittest
 from xbee.base import XBeeBase
-from xbee.tests.Fake import FakeDevice, FakeReadDevice
+from xbee.tests.Fake import Serial
 
 class TestWriteToDevice(unittest.TestCase):
     """
@@ -22,42 +22,45 @@ class TestWriteToDevice(unittest.TestCase):
         _write method should write the expected data to the serial
         device
         """
-        device = FakeDevice()
+        device = Serial()
 
         xbee = XBeeBase(device)
         xbee._write(b'\x00')
 
         # Check resuting state of fake device
+        result_frame   = device.get_data_written()
         expected_frame = b'\x7E\x00\x01\x00\xFF'
-        self.assertEqual(device.data, expected_frame)
+        self.assertEqual(result_frame, expected_frame)
 
     def test_write_again(self):
         """
         _write method should write the expected data to the serial
         device
         """
-        device = FakeDevice()
+        device = Serial()
 
         xbee = XBeeBase(device)
         xbee._write(b'\x00\x01\x02')
 
         # Check resuting state of fake device
         expected_frame = b'\x7E\x00\x03\x00\x01\x02\xFC'
-        self.assertEqual(device.data, expected_frame)
+        result_frame   = device.get_data_written()
+        self.assertEqual(result_frame, expected_frame)
 
     def test_write_escaped(self):
         """
         _write method should write the expected data to the serial
         device
         """
-        device = FakeDevice()
+        device = Serial()
 
         xbee = XBeeBase(device,escaped=True)
         xbee._write(b'\x7E\x01\x7D\x11\x13')
 
         # Check resuting state of fake device
         expected_frame = b'\x7E\x00\x05\x7D\x5E\x01\x7D\x5D\x7D\x31\x7D\x33\xDF'
-        self.assertEqual(device.data, expected_frame)
+        result_frame   = device.get_data_written()
+        self.assertEqual(result_frame, expected_frame)
 
 class TestReadFromDevice(unittest.TestCase):
     """
@@ -68,7 +71,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         _wait_for_frame should properly read a frame of data
         """
-        device = FakeReadDevice(b'\x7E\x00\x01\x00\xFF')
+        device = Serial()
+        device.set_read_data(b'\x7E\x00\x01\x00\xFF')
         xbee = XBeeBase(device)
 
         frame = xbee._wait_for_frame()
@@ -78,8 +82,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         _wait_for_frame should skip invalid data
         """
-        device = FakeReadDevice(
-            b'\x7E\x00\x01\x00\xFA' + b'\x7E\x00\x01\x05\xFA')
+        device = Serial()
+        device.set_read_data(b'\x7E\x00\x01\x00\xFA' + b'\x7E\x00\x01\x05\xFA')
         xbee = XBeeBase(device)
 
         frame = xbee._wait_for_frame()
@@ -90,7 +94,8 @@ class TestReadFromDevice(unittest.TestCase):
         _wait_for_frame should properly read a frame of data
         Verify that API mode 2 escaped bytes are read correctly
         """
-        device = FakeReadDevice(b'\x7E\x00\x04\x7D\x5E\x7D\x5D\x7D\x31\x7D\x33\xE0')
+        device = Serial()
+        device.set_read_data(b'\x7E\x00\x04\x7D\x5E\x7D\x5D\x7D\x31\x7D\x33\xE0')
 
         xbee = XBeeBase(device,escaped=True)
 
@@ -150,7 +155,7 @@ class TestAsyncCallback(unittest.TestCase):
 
     def setUp(self):
         self.xbee = None
-        self.serial = FakeReadDevice([], silent_on_empty=True)
+        self.serial = Serial()
         self.callback = lambda data: None
         self.error_callback = lambda data: None
 

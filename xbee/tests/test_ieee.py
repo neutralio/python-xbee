@@ -8,7 +8,7 @@ pmalmsten@gmail.com
 Tests the XBee (IEEE 802.15.4) implementation class for XBee API compliance
 """
 import unittest, sys, traceback
-from xbee.tests.Fake import FakeDevice, FakeReadDevice
+from xbee.tests.Fake import Serial
 from xbee.ieee import XBee
 from xbee.frame import APIFrame
 from xbee.python2to3 import byteToInt, intToByte, stringToBytes
@@ -443,7 +443,7 @@ class TestWriteToDevice(unittest.TestCase):
         API AT command packet to the serial device.
         """
         
-        serial_port = FakeDevice()
+        serial_port = Serial()
         xbee = XBee(serial_port)
         
         # Send an AT command
@@ -451,7 +451,8 @@ class TestWriteToDevice(unittest.TestCase):
         
         # Expect a full packet to be written to the device
         expected_data = b'\x7E\x00\x04\x08AMY\x10'
-        self.assertEqual(serial_port.data, expected_data)
+        result_data   = serial_port.get_data_written()
+        self.assertEqual(result_data, expected_data)
         
         
     def test_send_at_command_with_param(self):
@@ -460,7 +461,7 @@ class TestWriteToDevice(unittest.TestCase):
         API AT command packet to the serial device.
         """
         
-        serial_port = FakeDevice()
+        serial_port = Serial()
         xbee = XBee(serial_port)
         
         # Send an AT command
@@ -472,8 +473,9 @@ class TestWriteToDevice(unittest.TestCase):
         )
         
         # Expect a full packet to be written to the device
+        result_data   = serial_port.get_data_written()
         expected_data = b'\x7E\x00\x06\x08AMY\x00\x00\x10'
-        self.assertEqual(serial_port.data, expected_data)
+        self.assertEqual(result_data, expected_data)
         
 class TestSendShorthand(unittest.TestCase):
     """
@@ -485,7 +487,7 @@ class TestSendShorthand(unittest.TestCase):
         """
         Prepare a fake device to read from
         """
-        self.ser = FakeDevice()
+        self.ser = Serial()
         self.xbee = XBee(self.ser)
     
     def test_send_at_command(self):
@@ -496,21 +498,23 @@ class TestSendShorthand(unittest.TestCase):
         self.xbee.at(frame_id=stringToBytes('A'), command=stringToBytes('MY'))
         
         # Expect a full packet to be written to the device
+        result_data = self.ser.get_data_written()
         expected_data = b'\x7E\x00\x04\x08AMY\x10'
-        self.assertEqual(self.ser.data, expected_data)
+        self.assertEqual(result_data, expected_data)
         
     def test_send_at_command_with_param(self):
         """
         calling send should write a full API frame containing the
         API AT command packet to the serial device.
         """
-        
+       
         # Send an AT command
         self.xbee.at(frame_id=stringToBytes('A'), command=stringToBytes('MY'), parameter=b'\x00\x00')
         
         # Expect a full packet to be written to the device
+        result_data = self.ser.get_data_written()
         expected_data = b'\x7E\x00\x06\x08AMY\x00\x00\x10'
-        self.assertEqual(self.ser.data, expected_data)
+        self.assertEqual(result_data, expected_data)
         
     def test_send_tx_with_close_brace(self):
         """
@@ -518,8 +522,9 @@ class TestSendShorthand(unittest.TestCase):
         must write correctly.
         """
         self.xbee.tx(dest_addr=b'\x01\x02',data=b'{test=1}')
+        result_data = self.ser.get_data_written()
         expected_data = b'\x7E\x00\x0D\x01\x00\x01\x02\x00{test=1}\xD5'
-        self.assertEqual(self.ser.data, expected_data)
+        self.assertEqual(result_data, expected_data)
         
     def test_shorthand_disabled(self):
         """
@@ -544,7 +549,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         read and parse a parameterless AT command
         """
-        device = FakeReadDevice(b'\x7E\x00\x05\x88DMY\x01\x8c')
+        device = Serial()
+        device.set_read_data(b'\x7E\x00\x05\x88DMY\x01\x8c')
         xbee = XBee(device)
         
         info = xbee.wait_read_frame()
@@ -558,9 +564,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         read and parse an AT command with a parameter
         """
-        device = FakeReadDevice(
-            b'\x7E\x00\x08\x88DMY\x01\x00\x00\x00\x8c'
-        )
+        device = Serial()
+        device.set_read_data(b'\x7E\x00\x08\x88DMY\x01\x00\x00\x00\x8c')
         xbee = XBee(device)
         
         info = xbee.wait_read_frame()
@@ -585,10 +590,8 @@ class TestReadFromDevice(unittest.TestCase):
         sample = b'\x00\xAA\x00\xFF'
         data = header + sample
         
-        device = FakeReadDevice(
-            APIFrame(data = b'\x88DIS\x00' + data).output()
-        )
-        
+        device = Serial()
+        device.set_read_data(APIFrame(data = b'\x88DIS\x00' + data).output());
         xbee = XBee(device)
         
         info = xbee.wait_read_frame()
@@ -616,10 +619,9 @@ class TestReadFromDevice(unittest.TestCase):
         # ADC0 value of 255
         sample = b'\x00\xAA\x00\xFF'
         data = header + sample
-        
-        device = FakeReadDevice(
-            APIFrame(data = b'\x97D\x00\x13\xa2\x00@oG\xe4v\x1aIS\x00' + data).output()
-        )
+       
+        device = Serial()
+        device.set_read_data(APIFrame(data = b'\x97D\x00\x13\xa2\x00@oG\xe4v\x1aIS\x00' + data).output())
         
         xbee = XBee(device)
         
@@ -655,9 +657,8 @@ class TestReadFromDevice(unittest.TestCase):
         # RX frame data
         rx_io_resp = b'\x83\x00\x01\x28\x00'
     
-        device = FakeReadDevice(
-            b'\x7E\x00\x0C'+ rx_io_resp + data + b'\xfd'
-        )
+        device = Serial()
+        device.set_read_data(b'\x7E\x00\x0C'+ rx_io_resp + data + b'\xfd')
         xbee = XBee(device)
         
         info = xbee.wait_read_frame()
@@ -681,16 +682,17 @@ class TestReadFromDevice(unittest.TestCase):
         an empty string. In this event, we must not crash.
         """
         
-        class BadReadDevice(FakeReadDevice):
+        class BadReadDevice(Serial):
             def __init__(self, bad_read_index, data):
                 self.read_id = 0
                 self.bad_read_index = bad_read_index
-                super(BadReadDevice, self).__init__(data)
+                super(BadReadDevice, self).__init__()
+                self.set_read_data(data)
             
-            def inWaiting(self):
+            def in_waiting(self):
                 return 1
                 
-            def read(self):
+            def read(self, length=1):
                 if self.read_id == self.bad_read_index:
                     self.read_id += 1
                     return ''
@@ -711,9 +713,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         read and parse an AT command with a parameter in escaped API mode
         """
-        device = FakeReadDevice(
-            b'~\x00\t\x88DMY\x01}^}]}1}3m'
-        )
+        device = Serial()
+        device.set_read_data(b'~\x00\t\x88DMY\x01}^}]}1}3m')
         xbee = XBee(device, escaped=True)
         
         info = xbee.wait_read_frame()
@@ -728,7 +729,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         If an empty frame is received from a device, it must be ignored.
         """
-        device = FakeReadDevice(b'\x7E\x00\x00\xFF\x7E\x00\x05\x88DMY\x01\x8c')
+        device = Serial()
+        device.set_read_data(b'\x7E\x00\x00\xFF\x7E\x00\x05\x88DMY\x01\x8c')
         xbee = XBee(device)
         
         #import pdb
@@ -744,7 +746,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         An rx data frame including a close brace must be read properly.
         """
-        device = FakeReadDevice(APIFrame(b'\x81\x01\x02\x55\x00{test=1}').output())
+        device = Serial()
+        device.set_read_data(APIFrame(b'\x81\x01\x02\x55\x00{test=1}').output())
         xbee = XBee(device)
         
         info = xbee.wait_read_frame()
@@ -759,9 +762,8 @@ class TestReadFromDevice(unittest.TestCase):
         """
         An escaped rx data frame including a close brace must be read properly.
         """
-        device = FakeReadDevice(
-            APIFrame(b'\x81\x01\x02\x55\x00{test=1}', escaped=True).output()
-        )
+        device = Serial()
+        device.set_read_data(APIFrame(b'\x81\x01\x02\x55\x00{test=1}', escaped=True).output())
         xbee = XBee(device, escaped=True)
         
         info = xbee.wait_read_frame()
