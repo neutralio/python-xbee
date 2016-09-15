@@ -45,8 +45,7 @@ class ZigBee(XBeeBase):
                     "remote_at":
                         [{'name':'id',              'len':1,        'default':b'\x17'},
                          {'name':'frame_id',        'len':1,        'default':b'\x00'},
-                         # dest_addr_long is 8 bytes (64 bits), so use an unsigned long long
-                         {'name':'dest_addr_long',  'len':8,        'default':struct.pack('>Q', 0)},
+                         {'name':'dest_addr_long',  'len':8,        'default':struct.pack('>q', -1)},
                          {'name':'dest_addr',       'len':2,        'default':b'\xFF\xFE'},
                          {'name':'options',         'len':1,        'default':b'\x02'},
                          {'name':'command',         'len':2,        'default':None},
@@ -54,16 +53,16 @@ class ZigBee(XBeeBase):
                     "tx":
                         [{'name':'id',              'len':1,        'default':b'\x10'},
                          {'name':'frame_id',        'len':1,        'default':b'\x01'},
-                         {'name':'dest_addr_long',  'len':8,        'default':None},
-                         {'name':'dest_addr',       'len':2,        'default':None},
+                         {'name':'dest_addr_long',  'len':8,        'default':struct.pack('>q', -1)},
+                         {'name':'dest_addr',       'len':2,        'default':b'\xFF\xFE'},
                          {'name':'broadcast_radius','len':1,        'default':b'\x00'},
                          {'name':'options',         'len':1,        'default':b'\x00'},
                          {'name':'data',            'len':None,     'default':None}],
                     "tx_explicit":
                         [{'name':'id',              'len':1,        'default':b'\x11'},
                          {'name':'frame_id',        'len':1,        'default':b'\x00'},
-                         {'name':'dest_addr_long',  'len':8,        'default':None},
-                         {'name':'dest_addr',       'len':2,        'default':None},
+                         {'name':'dest_addr_long',  'len':8,        'default':struct.pack('>q', -1)},
+                         {'name':'dest_addr',       'len':2,        'default':b'\xFF\xFE'},
                          {'name':'src_endpoint',    'len':1,        'default':None},
                          {'name':'dest_endpoint',   'len':1,        'default':None},
                          {'name':'cluster',         'len':2,        'default':None},
@@ -139,7 +138,7 @@ class ZigBee(XBeeBase):
                                      ('parameter',
                                        lambda self, original: self._parse_ND_at_response(original))]
                              },
-                     b"\x97": #Checked GDR (not sure about parameter, could be 4 bytes)
+                     b"\x97": # Checked GDR (not sure about parameter, could be 4 bytes)
                         {'name':'remote_at_response',
                          'structure':
                             [{'name':'frame_id',        'len':1},
@@ -151,6 +150,14 @@ class ZigBee(XBeeBase):
                           'parsing': [('parameter',
                                        lambda self, original: self._parse_IS_at_response(original))]
                              },
+                     b"\xa1": # See http://www.digi.com/resources/documentation/digidocs/pdfs/90002002.pdf
+                        {'name':'route_record_indicator',
+                         'structure':
+                            [{'name':'source_addr_long','len':8},
+                             {'name':'source_addr',     'len':2},
+                             {'name':'receive_options', 'len':1},
+                             {'name':'hop_count',       'len':1},
+                             {'name':'addresses',       'len':None}]},
                      b"\x95":
                         {'name':'node_id_indicator',
                          'structure':
@@ -166,7 +173,7 @@ class ZigBee(XBeeBase):
                              {'name':'digi_profile_id', 'len':2},
                              {'name':'manufacturer_id', 'len':2}]}
                      }
-    
+
     def _parse_IS_at_response(self, packet_info):
         """
         If the given packet is a successful remote AT response for an IS
@@ -233,7 +240,7 @@ class ZigBee(XBeeBase):
         sample_count = byteToInt(io_bytes[0])
         
         # bytes 1 and 2 are the DIO mask; bits 9 and 8 aren't used
-        dio_mask = (byteToInt(io_bytes[1]) << 8 | byteToInt(io_bytes[2])) & 0x0E7F
+        dio_mask = (byteToInt(io_bytes[1]) << 8 | byteToInt(io_bytes[2])) & 0x1CFF
         
         # byte 3 is the AIO mask
         aio_mask = byteToInt(io_bytes[3])

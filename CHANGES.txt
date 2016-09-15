@@ -48,3 +48,49 @@ v2.0.0  12/29/10 -- Added preiminary support for XBee ZB devices; thanks
                       Greg and Brian!
                     Improved & unified sample data header parsing code.
                     Improved documentation.
+v2.1.0  4/14/13 -- Support for XBee ZB devices significantly improved.
+                   Now raises a KeyError with a useful message when a 
+                     response that looks like a command is received. This 
+                     helps debug devices that are not in API mode.
+                   Improper lengths for the ZigBee tx_explicit cluster 
+                     and profile fields have been corrected.
+                   Removed auto-testing distutils extension for lack of 
+                     easy cross-version compatibility.
+                   Now compatible with both Python 2.X and Python 3.X.
+                   Fixed bug in APIFrame.escape().
+                   Fixed crash where a failed call to Serial.read() 
+                     could return nothing.
+                   Packet-parsing subsystem generalized to allow for 
+                     much more general parsing behavior.
+                   ZigBee now parses IS command responses.
+                   Node Discover responses for ZigBee devices are 
+                     now parsed.
+                   Added tests for escaped API communication.
+                   Fixes issue #31 on Google Code: parameter information
+                     for lowercase nd or is commands were not parsed.
+                   Closes issue 35, as reported by Mark Fickett
+                   If an empty frame is received from a device, it is 
+                     ignored.
+                   Removed deprecated build process files.
+                   Backported parsing of IS AT command response as I/O 
+                     data from ZigBee devices.
+                     
+                   BACKWARDS-INCOMPATIBLE CHANGES:
+                     XBee IS "Force Sample" AT response (and Remote AT Response) 'parameter'
+                       value is no longer raw; it is parsed as I/O samples. 
+                       See the documentation for details.
+                     ZigBee IS "Force Sample" AT response (and Remote AT Response) 'parameter'
+                       value is no longer raw; it is parsed as I/O samples.
+                       See the documentation for details.
+                     ZigBee ND "Node Discover" AT response (and Remote AT Response) 'parameter'
+                       value is no longer raw; it is parsed into a node
+                       discover dictionary. See the documentation for details.
+v2.2.2  11/19/15 -- Add error_callback function to XBeeBase
+                   * If an error_callback method is given to the XBeeBase constructor
+                     (in addition to the callback method),
+                     a new thread will automatically be spawned. This thread
+                     will read from the serial port and call the error_callback
+                     when an unexpected Exception (not ThreadQuitException) is raised
+                     while waiting for serial data. This generally indicates that the XBee
+                     serial interface needs to be reconnected.
+v2.2.3  11/21/15 --  Fix README for GitHub and PyPI

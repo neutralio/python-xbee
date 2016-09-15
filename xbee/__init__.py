@@ -7,3 +7,4 @@ pmalmsten@gmail.com
 
 from xbee.ieee import XBee
 from xbee.zigbee import ZigBee
+from xbee.digimesh import DigiMesh

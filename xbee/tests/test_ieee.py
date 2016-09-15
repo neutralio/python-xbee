@@ -10,6 +10,7 @@ Tests the XBee (IEEE 802.15.4) implementation class for XBee API compliance
 import unittest, sys, traceback
 from xbee.tests.Fake import FakeDevice, FakeReadDevice
 from xbee.ieee import XBee
+from xbee.frame import APIFrame
 from xbee.python2to3 import byteToInt, intToByte, stringToBytes
 
 class InitXBee(unittest.TestCase):
@@ -511,6 +512,15 @@ class TestSendShorthand(unittest.TestCase):
         expected_data = b'\x7E\x00\x06\x08AMY\x00\x00\x10'
         self.assertEqual(self.ser.data, expected_data)
         
+    def test_send_tx_with_close_brace(self):
+        """
+        Calling tx where the given data string includes a close brace '}'
+        must write correctly.
+        """
+        self.xbee.tx(dest_addr=b'\x01\x02',data=b'{test=1}')
+        expected_data = b'\x7E\x00\x0D\x01\x00\x01\x02\x00{test=1}\xD5'
+        self.assertEqual(self.ser.data, expected_data)
+        
     def test_shorthand_disabled(self):
         """
         When shorthand is disabled, any attempt at calling a 
@@ -559,6 +569,72 @@ class TestReadFromDevice(unittest.TestCase):
                          'command':b'MY',
                          'status':b'\x01',
                          'parameter':b'\x00\x00\x00'}
+        self.assertEqual(info, expected_info)
+        
+    def test_is_response_parsed_as_io(self):
+        """
+        I/O data in a AT response for an IS command is parsed.
+        """
+         ## Build IO data
+        # One sample, ADC 0 enabled
+        # DIO 1,3,5,7 enabled
+        header = b'\x01\x02\xAA'
+        
+        # First 7 bits ignored, DIO8 low, DIO 0-7 alternating
+        # ADC0 value of 255
+        sample = b'\x00\xAA\x00\xFF'
+        data = header + sample
+        
+        device = FakeReadDevice(
+            APIFrame(data = b'\x88DIS\x00' + data).output()
+        )
+        
+        xbee = XBee(device)
+        
+        info = xbee.wait_read_frame()
+        expected_info = {'id':'at_response',
+                         'frame_id':b'D',
+                         'command':b'IS',
+                         'status':b'\x00',
+                         'parameter':[{'dio-1':True,
+                                      'dio-3':True,
+                                      'dio-5':True,
+                                      'dio-7':True,
+                                      'adc-0':255}]}
+        self.assertEqual(info, expected_info)
+        
+    def test_is_remote_response_parsed_as_io(self):
+        """
+        I/O data in a Remote AT response for an IS command is parsed.
+        """
+         ## Build IO data
+        # One sample, ADC 0 enabled
+        # DIO 1,3,5,7 enabled
+        header = b'\x01\x02\xAA'
+        
+        # First 7 bits ignored, DIO8 low, DIO 0-7 alternating
+        # ADC0 value of 255
+        sample = b'\x00\xAA\x00\xFF'
+        data = header + sample
+        
+        device = FakeReadDevice(
+            APIFrame(data = b'\x97D\x00\x13\xa2\x00@oG\xe4v\x1aIS\x00' + data).output()
+        )
+        
+        xbee = XBee(device)
+        
+        info = xbee.wait_read_frame()
+        expected_info = {'id':'remote_at_response',
+                         'frame_id':b'D',
+                         'source_addr_long': b'\x00\x13\xa2\x00@oG\xe4',
+                         'source_addr': b'v\x1a',
+                         'command':b'IS',
+                         'status':b'\x00',
+                         'parameter':[{'dio-1':True,
+                                      'dio-3':True,
+                                      'dio-5':True,
+                                      'dio-7':True,
+                                      'adc-0':255}]}
         self.assertEqual(info, expected_info)
         
     def test_read_io_data(self):
@@ -646,6 +722,54 @@ class TestReadFromDevice(unittest.TestCase):
                          'command':b'MY',
                          'status':b'\x01',
                          'parameter':b'\x7E\x7D\x11\x13'}
+        self.assertEqual(info, expected_info)
+        
+    def test_empty_frame_ignored(self):
+        """
+        If an empty frame is received from a device, it must be ignored.
+        """
+        device = FakeReadDevice(b'\x7E\x00\x00\xFF\x7E\x00\x05\x88DMY\x01\x8c')
+        xbee = XBee(device)
+        
+        #import pdb
+        #pdb.set_trace()
+        info = xbee.wait_read_frame()
+        expected_info = {'id':'at_response',
+                         'frame_id':b'D',
+                         'command':b'MY',
+                         'status':b'\x01'}
+        self.assertEqual(info, expected_info)
+        
+    def test_read_rx_with_close_brace(self):
+        """
+        An rx data frame including a close brace must be read properly.
+        """
+        device = FakeReadDevice(APIFrame(b'\x81\x01\x02\x55\x00{test=1}').output())
+        xbee = XBee(device)
+        
+        info = xbee.wait_read_frame()
+        expected_info = {'id':'rx',
+                         'source_addr':b'\x01\x02',
+                         'rssi':b'\x55',
+                         'options':b'\x00',
+                         'rf_data':b'{test=1}'}
+        self.assertEqual(info, expected_info)
+        
+    def test_read_rx_with_close_brace_escaped(self):
+        """
+        An escaped rx data frame including a close brace must be read properly.
+        """
+        device = FakeReadDevice(
+            APIFrame(b'\x81\x01\x02\x55\x00{test=1}', escaped=True).output()
+        )
+        xbee = XBee(device, escaped=True)
+        
+        info = xbee.wait_read_frame()
+        expected_info = {'id':'rx',
+                         'source_addr':b'\x01\x02',
+                         'rssi':b'\x55',
+                         'options':b'\x00',
+                         'rf_data':b'{test=1}'}
         self.assertEqual(info, expected_info)
 
 if __name__ == '__main__':

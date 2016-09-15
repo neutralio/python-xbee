@@ -24,7 +24,8 @@ raw communication details.
     This library is compatible with both XBee 802.15.4 (Series 1)
     and XBee ZigBee (Series 2) modules, normal and PRO. The following
     examples are applicable to XBee 802.15.4 modules; to follow
-    these examples with a XBee ZigBee device, change the line::
+    these examples with a XBee ZigBee device or a Series 1 device loaded 
+    with Digimesh firmware, change the line::
         
         xbee = XBee(serial_port)
 
@@ -102,8 +103,7 @@ asynchonous notification of received data is needed::
     
    When asychonous mode is enabled, the provided callback method
    is called by a background thread managed by the xbee package.
-   Any/all thread safety considerations may apply when employing 
-   this functionality to modify external state.
+   Make sure that updates to external state are thread-safe.
 
 Note that a background thread is automatically started
 to handle receiving and processing incoming data from an
@@ -156,6 +156,31 @@ sample dictionary will always follow this pattern::
 
 The number of dio and adc values returned depends upon the type and
 configuration of the XBee device used with this library.
+
+Response Parsing
+~~~~~~~~~~~~~~~~
+
+*As of version 2.1.0*
+
+For XBee devices, sample data within I/O sample messages is automatically
+parsed into the above format. In addition, when an "IS", Force Sample,
+AT command is issued, either to a local device or a remote device, the 
+value of the "parameter" field in the response will be automatically 
+parsed as I/O sample data.
+
+ZigBee devices extend this behavior to include automatic parsing of
+"ND", Node Discover, AT command responses. The parameter field of a 
+ND AT response will assume the following format::
+    
+    {"source_addr":      two bytes,
+     "source_addr_long": eight bytes,
+     "node_identifier":  string,
+     "parent_address":   two bytes,
+     "device_type":      one byte,
+     "status":           one byte,
+     "profile_id":       two bytes,
+     "manufacturer":     two bytes,
+    }
 
 Sending Data to an XBee Device
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

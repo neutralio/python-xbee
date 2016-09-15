@@ -131,7 +131,10 @@ class XBee(XBeeBase):
                             [{'name':'frame_id',    'len':1},
                              {'name':'command',     'len':2},
                              {'name':'status',      'len':1},
-                             {'name':'parameter',   'len':None}]},
+                             {'name':'parameter',   'len':None}],
+                         'parsing': [('parameter',
+                                       lambda xbee,original: xbee._parse_IS_at_response(original))]
+                             },
                      b"\x97":
                         {'name':'remote_at_response',
                          'structure':
@@ -140,8 +143,21 @@ class XBee(XBeeBase):
                              {'name':'source_addr',     'len':2},
                              {'name':'command',         'len':2},
                              {'name':'status',          'len':1},
-                             {'name':'parameter',       'len':None}]},
+                             {'name':'parameter',       'len':None}],
+                         'parsing': [('parameter',
+                                       lambda xbee,original: xbee._parse_IS_at_response(original))]
+                             },
                      }
+                     
+    def _parse_IS_at_response(self, packet_info):
+        """
+        If the given packet is a successful remote AT response for an IS
+        command, parse the parameter field as IO data.
+        """
+        if packet_info['id'] in ('at_response','remote_at_response') and packet_info['command'].lower() == b'is' and packet_info['status'] == b'\x00':
+               return self._parse_samples(packet_info['parameter'])
+        else:
+            return packet_info['parameter']
     
     def __init__(self, *args, **kwargs):
         # Call the super class constructor to save the serial port
