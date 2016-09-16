@@ -11,8 +11,7 @@ This class defines data and methods common to all XBee modules.
 This class should be subclassed in order to provide
 series-specific functionality.
 """
-import threading, os, logging, time
-import serial
+import threading, serial, logging, time, os
 from xbee.frame import APIFrame
 from xbee.python2to3 import byteToInt, intToByte
 
@@ -35,29 +34,31 @@ class XBeeBase(threading.Thread):
     parsing methods for XBee modules.
 
     Constructor arguments:
-        ser:    The file-like serial port to use.
+        ser:       Either an already constructed pySerial object or a dictionary 
+                   of serial settings which can be used to construct a serial 
+                   object from.
 
-        shorthand: boolean flag which determines whether shorthand command
+        shorthand: Boolean flag which determines whether shorthand command
                    calls (i.e. xbee.at(...) instead of xbee.send("at",...)
                    are allowed.
 
-        callback: function which should be called with frame data
-                  whenever a frame arrives from the serial port.
-                  When this is not None, a background thread to monitor
-                  the port and call the given function is automatically
-                  started.
+        callback:  Function which should be called with frame data
+                   whenever a frame arrives from the serial port.
+                   When this is not None, a background thread to monitor
+                   the port and call the given function is automatically
+                   started.
 
-        escaped: boolean flag which determines whether the library should
-                 operate in escaped mode. In this mode, certain data bytes
-                 in the output and input streams will be escaped and unescaped
-                 in accordance with the XBee API. This setting must match
-                 the appropriate api_mode setting of an XBee device; see your
-                 XBee device's documentation for more information.
+        escaped:   Boolean flag which determines whether the library should
+                   operate in escaped mode. In this mode, certain data bytes
+                   in the output and input streams will be escaped and unescaped
+                   in accordance with the XBee API. This setting must match
+                   the appropriate api_mode setting of an XBee device; see your
+                   XBee device's documentation for more information.
 
-        error_callback: function which should be called with an Exception
-                 whenever an exception is raised while waiting for data from
-                 the serial port. This will only take affect if the callback
-                 argument is also used.
+        error_callback: Function which should be called with an Exception
+                   whenever an exception is raised while waiting for data from
+                   the serial port. This will only take affect if the callback
+                   argument is also used.
 
     """
     def __init__(self, ser=None, shorthand=True, callback=None, escaped=False, 
@@ -66,16 +67,16 @@ class XBeeBase(threading.Thread):
 
 
         if ( hasattr(ser, 'isOpen') ):
-            # If a ser looks like a Serial object then simply set self.serial to this object
+            # If a ser looks like a pySerial object, set self.serial to this object
             self.serial = ser
             self.serial_opts = self.serial.getSettingsDict()
             self.serial_opts['port'] = self.serial.port
         elif isinstance(ser, dict):
-            # Else if ser looks like a dictionary of serial options then create a new serial object from these
+            # If ser looks like a dict of serial options, create a new pySerial object
             self.serial = serial.Serial(**ser)
             self.serial_opts = ser
         else:
-            # Else set self.serial to None
+            # Else, set self.serial to None
             self.serial = None
             self.serial_opts = None
 
@@ -94,7 +95,8 @@ class XBeeBase(threading.Thread):
         start: None -> None
 
         If callback is set then we are not being used in async mode.
-        In which case we just return. Serial re-init will only work in async mode.
+        In which case we just return. Serial re-init will only work 
+        in async mode.
         """
         if not self._callback: return
 
@@ -134,17 +136,22 @@ class XBeeBase(threading.Thread):
 
         This method overrides threading.Thread.run() and is automatically
         called when an instance is created with threading enabled.
+
+        This method will attempt to re-initialise the serial port if there 
+        are any failures for example the USB port is unplugged.
         """
         while not self._exit.is_set():
             try:
                 if self.serial is None:
-                    # Allows the code to recover/initialize if the USB device 
-                    # is unplugged after this code is running:
+                    # Allows the code to recover/initialise if the USB device 
+                    # is unplugged after this code is running
                     if not os.path.exists( self.serial_opts['port'] ):
                         self._exit.wait(10) # wait before retry
                         log.debug("Waiting for path to exist")
                         continue
-                    # self.serial_opts may be a dict of init params we can use
+
+                    # self.serial_opts may contain the params we 
+                    # can use to re-initialise the serial port
                     self.serial = serial.Serial(**self.serial_opts)
                     log.debug("Opened serial: %r", self.serial_opts)
 
@@ -152,8 +159,8 @@ class XBeeBase(threading.Thread):
                 # based on the serial timeout
                 self._callback(self.wait_read_frame(timeout=10))
 
-            # Ignore timeouts, but this allows the thread to be responsive rather
-            # than blocking indefinitely on read
+            # Ignore timeouts, but this allows the thread to be responsive 
+            # rather than blocking indefinitely on read
             except TimeoutException as e:
                 if e.args: log.info("Packet timeout after %s bytes", e)
 
@@ -162,14 +169,14 @@ class XBeeBase(threading.Thread):
                 self._exit.wait(2)
                 
                 try:
-                    # If the serial object is still in one piece try to re-open the port...
+                    # If the serial object is still in one piece try to re-open the port
                     if self.serial is not None:
                         log.info("Attempting to re-open serial port %s", self.serial.port)
                         self.serial.open()
                         log.info("Serial port re-opened successfully")
 
                 except Exception as e: 
-                    # Can't re-open port, worst case, completely re-init the serial port...
+                    # Can't re-open port, worst case, completely re-init the serial port
                     log.info("Error re-opening serial port: %s", e)
                     
                     # Closing the serial port and setting it to None provokes the 
@@ -177,7 +184,7 @@ class XBeeBase(threading.Thread):
                     self.serial.close()
                     self.serial = None
  
-                    # If the settings backup is empty, then there is no hope,
+                    # If the serial_opts backup is empty, then there is no hope,
                     # we will not be able to re-init the port. So abort!
                     if self.serial_opts is None: 
                        raise
@@ -188,7 +195,7 @@ class XBeeBase(threading.Thread):
 
             except Exception as e:
                 # Unexpected thread quit.
-                log.exception( "Unexpected error! %s", e )
+                log.exception("Unexpected error! %s", e)
                 if self._error_callback:
                     self._error_callback(e)
 
@@ -251,7 +258,7 @@ class XBeeBase(threading.Thread):
 
             except ValueError as e:
                 # Bad frame, so restart
-                # log.info( "Bad frame %s", e )
+                # log.debug("Bad frame %s", e)
                 frame = APIFrame(escaped=self._escaped)
 
     def _build_command(self, cmd, **kwargs):
