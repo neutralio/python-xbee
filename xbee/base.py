@@ -1,5 +1,5 @@
 """
-xbee.py
+base.py
 
 By Paul Malmsten, 2010
 Inspired by code written by Amit Synderman and Marco Sangalli
@@ -58,36 +58,50 @@ class XBeeBase(threading.Thread):
                  whenever an exception is raised while waiting for data from
                  the serial port. This will only take affect if the callback
                  argument is also used.
+
     """
-    def __init__(self, ser=None, shorthand=True, callback=None, escaped=False, error_callback=None, start_callback=None):
+    def __init__(self, ser=None, shorthand=True, callback=None, escaped=False, 
+                 error_callback=None):
         super(XBeeBase, self).__init__()
 
+
         if ( hasattr(ser, 'isOpen') ):
+            # If a ser looks like a Serial object then simply set self.serial to this object
             self.serial = ser
             self.serial_opts = self.serial.getSettingsDict()
             self.serial_opts['port'] = self.serial.port
-        else:
-            self.serial = serial.Serial(ser)
+        elif isinstance(ser, dict):
+            # Else if ser looks like a dictionary of serial options then create a new serial object from these
+            self.serial = serial.Serial(**ser)
             self.serial_opts = ser
+        else:
+            # Else set self.serial to None
+            self.serial = None
+            self.serial_opts = None
 
         self.shorthand = shorthand
         self._error_callback = error_callback
-        self._start_callback = start_callback
         self._exit = threading.Event()
         self._escaped = escaped
         self._thread = None
 
         if callback:
-            self._callback = callback
-            self.start()
+           self._callback = callback
+           self.start()
 
     def start(self):
+        """
+        start: None -> None
+
+        If callback is set then we are not being used in async mode.
+        In which case we just return. Serial re-init will only work in async mode.
+        """
         if not self._callback: return
+
         self._exit.clear()
-        port = self.serial.port if self.serial else self.serial_opts['port']
-        self._thread = threading.Thread(
-                target = self.run,
-                name = "XBee @ %s" % port )
+        self._thread = threading.Thread( 
+                target = self.run, 
+                name = "XBee @ %s" % self.serial.port )
         self._thread.daemon = True
         self._thread.start()
 
@@ -100,6 +114,7 @@ class XBeeBase(threading.Thread):
         up before returning.
         """
         if not self._callback: return
+
         self._exit.set()
         self._thread.join(10)
 
@@ -120,33 +135,26 @@ class XBeeBase(threading.Thread):
         This method overrides threading.Thread.run() and is automatically
         called when an instance is created with threading enabled.
         """
-        if self.serial is not None and self._start_callback:
-            self._start_callback(self)
-
         while not self._exit.is_set():
             try:
                 if self.serial is None:
-
                     # Allows the code to recover/initialize if the USB device 
                     # is unplugged after this code is running:
                     if not os.path.exists( self.serial_opts['port'] ):
                         self._exit.wait(10) # wait before retry
                         log.debug("Waiting for path to exist")
                         continue
-
-                    # self.serial may be a dict of init params
+                    # self.serial_opts may be a dict of init params we can use
                     self.serial = serial.Serial(**self.serial_opts)
                     log.debug("Opened serial: %r", self.serial_opts)
-                    if self._start_callback: self._start_callback(self)
 
-                # FIXME this timeout should not be hard-coded, it should be 
+                # TODO this timeout should not be hard-coded, it should be 
                 # based on the serial timeout
-                # self._callback(self.wait_read_frame(self.serial.timeout))
                 self._callback(self.wait_read_frame(timeout=10))
 
+            # Ignore timeouts, but this allows the thread to be responsive rather
+            # than blocking indefinitely on read
             except TimeoutException as e:
-                # Ignore timeouts, but this allows the thread to be responsive rather
-                # than blocking indefinitely on read
                 if e.args: log.info("Packet timeout after %s bytes", e)
 
             except serial.SerialException as e:
@@ -157,22 +165,20 @@ class XBeeBase(threading.Thread):
                     # If the serial object is still in one piece try to re-open the port...
                     if self.serial is not None:
                         log.info("Attempting to re-open serial port %s", self.serial.port)
-                        self.serial.close()
                         self.serial.open()
                         log.info("Serial port re-opened successfully")
 
                 except Exception as e: 
-                    # Can't re-open port, Worst case, completely re-init the serial port...
+                    # Can't re-open port, worst case, completely re-init the serial port...
                     log.info("Error re-opening serial port: %s", e)
                     
-                    # Close the serial port and set it to None
-                    # This then provokes the outer loop to re-init
-                    # the port from the settings backup
+                    # Closing the serial port and setting it to None provokes the 
+                    # outer loop to re-init the port from scratch
                     self.serial.close()
                     self.serial = None
  
-                    # If the settings backup is empty there is no hope,
-                    # we will not be able to re-init the port. So Abort!
+                    # If the settings backup is empty, then there is no hope,
+                    # we will not be able to re-init the port. So abort!
                     if self.serial_opts is None: 
                        raise
 
@@ -185,9 +191,6 @@ class XBeeBase(threading.Thread):
                 log.exception( "Unexpected error! %s", e )
                 if self._error_callback:
                     self._error_callback(e)
-                # Do not break on error as this is not thread safe
-                # See: http://axotron.se/blog/problems-with-python-xbee-2-2-3-package/
-                # break
 
         self.serial.close()
 
@@ -231,8 +234,6 @@ class XBeeBase(threading.Thread):
                         deadline and time.time() > deadline:
                     raise TimeoutException
 
-                #byte = self.serial.read( frame.remaining_bytes() )
-                #for b in byte: frame.fill(b)
                 byte = self.serial.read()
                 if len(byte) == 1:
                     frame.fill(byte)
@@ -250,7 +251,7 @@ class XBeeBase(threading.Thread):
 
             except ValueError as e:
                 # Bad frame, so restart
-                # log.exception( "Bad frame %s", e )
+                # log.info( "Bad frame %s", e )
                 frame = APIFrame(escaped=self._escaped)
 
     def _build_command(self, cmd, **kwargs):
