@@ -507,7 +507,7 @@ class TestSendShorthand(unittest.TestCase):
         calling send should write a full API frame containing the
         API AT command packet to the serial device.
         """
-       
+
         # Send an AT command
         self.xbee.at(frame_id=stringToBytes('A'), command=stringToBytes('MY'), parameter=b'\x00\x00')
         
@@ -619,7 +619,7 @@ class TestReadFromDevice(unittest.TestCase):
         # ADC0 value of 255
         sample = b'\x00\xAA\x00\xFF'
         data = header + sample
-       
+
         device = Serial()
         device.set_read_data(APIFrame(data = b'\x97D\x00\x13\xa2\x00@oG\xe4v\x1aIS\x00' + data).output())
         

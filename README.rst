@@ -1,6 +1,9 @@
 XBee
 ====
 
+.. image:: https://travis-ci.org/nioinnovation/python-xbee.svg?branch=master
+    :target: https://travis-ci.org/nioinnovation/python-xbee
+
 XBee provides an implementation of the XBee serial communication API. It
 allows one to easily access advanced features of one or more XBee
 devices from an application written in Python. An example use case might
@@ -60,7 +63,7 @@ To build the documentation yourself, ensure that `Sphinx
 and run ‘make html’. The documentation can then be opened in any modern
 web browser at docs/build/html/index.html.
 
-For more information about building or modifying this project’s
+For more information about building or modifying this project's
 documentation, see the documentation for the Sphinx project.
 
 Dependencies

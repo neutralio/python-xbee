@@ -8,22 +8,23 @@ pmalmsten@gmail.com
 Tests fake device objects for proper functionality.
 """
 import unittest
-from xbee.tests.Fake import FakeReadDevice
+from xbee.tests.Fake import Serial
 
-class TestFakeReadDevice(unittest.TestCase):
+class TestFakeSerialRead(unittest.TestCase):
     """
-    FakeReadDevice class should work as intended to emluate a serial 
-    port
+    Fake Serial class should work as intended to emluate reading from a serial port.
     """
+
     def setUp(self):
         """
-        Create a fake read device for each test
+        Create a fake read device for each test.
         """
-        self.device = FakeReadDevice("test")
-    
+        self.device = Serial()
+        self.device.set_read_data("test")
+
     def test_read_single_byte(self):
         """
-        reading one byte at a time should work as expected
+        Reading one byte at a time should work as expected.
         """
         self.assertEqual(self.device.read(), 't')
         self.assertEqual(self.device.read(), 'e')
@@ -32,13 +33,14 @@ class TestFakeReadDevice(unittest.TestCase):
         
     def test_read_multiple_bytes(self):
         """
-        reading multiple bytes at a time should work as expected
+        Reading multiple bytes at a time should work as expected.
         """
         self.assertEqual(self.device.read(3), 'tes')
         self.assertEqual(self.device.read(), 't')
         
-    def test_read_too_many(self):
+    def test_write(self):
         """
-        attempting to read too many bytes should raise an exception
+        Test serial write function.
         """
-        self.assertRaises(ValueError, self.device.read, 5)
+        self.device.write("Hello World")
+        self.assertEqual(self.device.get_data_written(), "Hello World")
