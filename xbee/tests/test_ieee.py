@@ -689,7 +689,7 @@ class TestReadFromDevice(unittest.TestCase):
                 super(BadReadDevice, self).__init__()
                 self.set_read_data(data)
             
-            def inWaiting(self):
+            def in_waiting(self):
                 return 1
                 
             def read(self, length=1):
