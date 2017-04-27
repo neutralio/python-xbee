@@ -107,7 +107,7 @@ class XBeeBase(threading.Thread):
                 if self._error_callback:
                     self._error_callback(e)
 
-    def _wait_for_frame(self):
+    def _wait_for_frame(self, timeout = 0):
         """
         _wait_for_frame: None -> binary data
 
@@ -121,7 +121,15 @@ class XBeeBase(threading.Thread):
         """
         frame = APIFrame(escaped=self._escaped)
 
+        # Note the function call start time
+        start_time = time.time()
+
         while True:
+                # Return if the timeout has expired. Safe here because
+                # received frame assembly has not started.
+                if timeout and (time.time() - start_time > timeout):
+                    return None
+
                 if self._callback and not self._thread_continue:
                     raise ThreadQuitException
 
@@ -394,7 +402,7 @@ class XBeeBase(threading.Thread):
         self._write(self._build_command(cmd, **kwargs))
 
 
-    def wait_read_frame(self):
+    def wait_read_frame(self, timeout = 0):
         """
         wait_read_frame: None -> frame info dictionary
 
@@ -404,8 +412,12 @@ class XBeeBase(threading.Thread):
         and returns the resulting dictionary
         """
 
-        frame = self._wait_for_frame()
-        return self._split_response(frame.data)
+        frame = self._wait_for_frame(timeout)
+        # Only try to split the response if there actually is one.
+        if frame:
+            return self._split_response(frame.data)
+        else:
+            return None
 
     def __getattr__(self, name):
         """
