@@ -115,9 +115,15 @@ class XBeeBase(object):
                 if field['len'] is not None:
                     # Was a default value specified?
                     default_value = field['default']
-                    
+
                     if isinstance(default_value, str):
-                        default_value = stringToBytes(default_value)
+                        try:
+                            default_value = stringToBytes(default_value)
+                        except Exception as e:
+                            default_aux = default_value
+                            default_value = b''
+                            for i in range(len(default_aux)):
+                                default_value = default_value+ b'\x00'
 
                     if default_value:
                         # If so, use it
